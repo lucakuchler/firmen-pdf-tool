@@ -24,28 +24,30 @@ if st.button("PDF Erstellen & Ausfüllen"):
     else:
         with st.spinner("Gemini berechnet die Werte und baut die PDF..."):
             try:
-                # 1. Gemini Client initialisieren
+                # 1. Gemini Client mit neuem SDK initialisieren
                 client = genai.Client(api_key=api_key)
                 
-                system_instruction = """
+                # Hier stellen wir die Anfrage an das Modell gemini-2.5-flash (oder gemini-2.5-pro)
+                prompt = f"""
                 Du bist ein hochpräzises Firmen-Berechnungs-Tool. 
-                Berechne und extrahiere die Daten exakt nach deinen Vorgaben.
-                WICHTIG: Gib am Ende AUSSCHLIESSLICH genau 4 kommagetrennte Werte/Zahlen zurück, sonst keinerlei Text.
+                Verarbeite folgende Eingabe basierend auf der Firmen-Logik:
+                {user_input}
+                
+                WICHTIG: Gib am Ende AUSSCHLIESSLICH genau 4 kommagetrennte Werte/Zahlen zurück, sonst keinerlei weiteren Text.
                 Beispiel: 1250.00, 19%, 237.50, 1487.50
                 """
-                
-                # Exakt gültige Modellnamen der API
-                # Für Pro kannst du 'gemini-1.5-pro' nutzen
-                model_name = "gemini-1.5-flash"
-                
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=user_input,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        temperature=0.2,
+
+                # Wir testen gemini-2.5-flash und schalten im Notfall auf gemini-2.5-pro um
+                try:
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt,
                     )
-                )
+                except Exception:
+                    response = client.models.generate_content(
+                        model='gemini-2.5-pro',
+                        contents=prompt,
+                    )
                 
                 # 2. Berechnete Werte aufteilen
                 werte = [w.strip() for w in response.text.split(",")]
@@ -58,7 +60,7 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 c.setFont("Helvetica-Bold", 12)
                 c.setFillColorRGB(0, 0, 0) # Schwarze Schrift
                 
-                # KOORDINATEN FÜR DIE 4 ZAHLEN (X = von links, Y = von unten)
+                # KOORDINATEN FÜR DIE 4 ZAHLEN (X = von links, Y = von unten in Punkten)
                 c.drawString(100, 700, werte[0])  # Zahl 1
                 c.drawString(100, 650, werte[1])  # Zahl 2
                 c.drawString(100, 600, werte[2])  # Zahl 3
@@ -85,7 +87,7 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 output_pdf.seek(0)
 
                 # 5. Erfolgsmeldung & Download-Button
-                st.success(f"PDF erfolgreich generiert! ({model_name})")
+                st.success("PDF erfolgreich generiert!")
                 st.download_button(
                     label="📥 Fertige PDF herunterladen",
                     data=output_pdf,
