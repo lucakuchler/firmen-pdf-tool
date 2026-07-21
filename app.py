@@ -23,25 +23,8 @@ if st.button("PDF Erstellen & Ausfüllen"):
     else:
         with st.spinner("Gemini berechnet die Werte und baut die PDF..."):
             try:
-                # 1. Gemini Client initialisieren
+                # 1. Client mit API-Key initialisieren
                 client = genai.Client(api_key=api_key)
-                
-                # Automatisch verfügbare Modelle für deinen API-Key abfragen
-                available_models = [m.name for m in client.models.list()]
-                
-                # Priorisiere 1.5-flash für stabile Free-Tier Limits
-                selected_model = None
-                for candidate in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash']:
-                    for m in available_models:
-                        if candidate in m:
-                            selected_model = m
-                            break
-                    if selected_model:
-                        break
-                
-                # Fallback, falls die Namen anders formatiert sind
-                if not selected_model and available_models:
-                    selected_model = available_models[0]
 
                 prompt = f"""
                 Du bist ein hochpräzises Firmen-Berechnungs-Tool. 
@@ -52,9 +35,9 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 Beispiel: 1250.00, 19%, 237.50, 1487.50
                 """
 
-                # Aufruf mit dem stabilen Modell
+                # HART FESTGELEGTES MODELL (keine automatische Auswahl mehr)
                 response = client.models.generate_content(
-                    model=selected_model,
+                    model='gemini-1.5-flash',
                     contents=prompt,
                 )
                 
@@ -70,10 +53,10 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 c.setFillColorRGB(0, 0, 0)
                 
                 # KOORDINATEN FÜR DIE 4 ZAHLEN
-                c.drawString(100, 700, werte[0])  # Zahl 1
-                c.drawString(100, 650, werte[1])  # Zahl 2
-                c.drawString(100, 600, werte[2])  # Zahl 3
-                c.drawString(100, 550, werte[3])  # Zahl 4
+                c.drawString(100, 700, werte[0])
+                c.drawString(100, 650, werte[1])
+                c.drawString(100, 600, werte[2])
+                c.drawString(100, 550, werte[3])
                 
                 c.save()
                 packet.seek(0)
@@ -87,7 +70,6 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 page.merge_page(zahlen_pdf.pages[0])
                 writer.add_page(page)
 
-                # Weitere Seiten übernehmen
                 for p in original_pdf.pages[1:]:
                     writer.add_page(p)
 
@@ -96,7 +78,7 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 output_pdf.seek(0)
 
                 # 5. Erfolgsmeldung & Download-Button
-                st.success(f"PDF erfolgreich generiert! (Nutzt Modell: {selected_model})")
+                st.success("PDF erfolgreich generiert!")
                 st.download_button(
                     label="📥 Fertige PDF herunterladen",
                     data=output_pdf,
