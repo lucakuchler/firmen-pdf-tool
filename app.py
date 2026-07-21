@@ -11,18 +11,26 @@ st.set_page_config(page_title="Firmen PDF Generator", page_icon="📄", layout="
 st.title("📄 Firmen PDF Generator")
 st.write("Füge Daten ein, um das PDF automatisch zu füllen.")
 
-# --- SIDEBAR: API KEY ---
-st.sidebar.header("Einstellungen")
-api_key = st.sidebar.text_input("Google AI Studio API-Key:", type="password")
+# --- API KEY AUTOMATISCH ODER MANUELL ---
+# Versucht den Key zuerst aus den Streamlit Secrets zu laden
+api_key = st.secrets.get("GEMINI_API_KEY", "")
+
+# Falls kein Key in den Secrets hinterlegt ist, Sidebar-Eingabe als Backup nutzen
+if not api_key:
+    st.sidebar.header("Einstellungen")
+    api_key = st.sidebar.text_input("Google AI Studio API-Key:", type="password")
 
 # --- MAIN INPUT ---
-user_input = st.text_area("Geben Sie hier die Daten oder Anweisungen ein:", height=150, placeholder="Z. B. 'Außenkreis Scheiben 5, Radius 10...'")
+user_input = st.text_area(
+    "Geben Sie hier die Daten oder Anweisungen ein:", 
+    height=150, 
+    placeholder="Z. B. 'Außenkreis Scheiben 5, Radius 10...'"
+)
 
 # --- MODELL-VERARBEITUNG ---
 def generate_values_with_gemini(api_key, user_text):
     genai.configure(api_key=api_key)
     
-    # Nutzt das etablierte Gemini 3.5 Flash / Flash-Latest Modell
     models_to_try = ["gemini-3.5-flash", "gemini-flash-latest"]
     
     prompt = f"""
@@ -55,76 +63,74 @@ def generate_values_with_gemini(api_key, user_text):
 # --- PROCESS BUTTON ---
 if st.button("🚀 PDF Erstellen & Ausfüllen", type="primary"):
     if not api_key:
-        st.error("Bitte gib zuerst deinen Gemini API-Key in der Seitenleiste ein!")
+        st.error("Kein API-Key gefunden! Bitte hinterlege GEMINI_API_KEY in den Secrets oder gib ihn in der Sidebar ein.")
     elif not user_input.strip():
         st.warning("Bitte gib Daten oder Text ein.")
     else:
-        with st.spinner("Verarbeite Daten mit Gemini..."):
-            try:
-                # 1. API Aufruf
-                raw_response = generate_values_with_gemini(api_key, user_input)
-                
-                # Werte parsen
-                werte = [w.strip() for w in raw_response.split(",")]
-                while len(werte) < 4:
-                    werte.append("0")
+        status_box = st.empty()
+        
+        try:
+            # 1. API Aufruf
+            status_box.info("🧠 Extrahiere Werte mit Gemini...")
+            raw_response = generate_values_with_gemini(api_key, user_input)
+            
+            # Werte parsen
+            werte = [w.strip() for w in raw_response.split(",")]
+            while len(werte) < 4:
+                werte.append("0")
 
-                st.info(f"Erkannte Werte (Aussen-Scheiben, Aussen-Radius, Innen-Radius, Innen-Scheiben): {', '.join(werte[:4])}")
+            status_box.empty()
+            st.info(f"📍 Erkannte Werte (Außen-Anz, Außen-Rad, Innen-Rad, Innen-Anz): {', '.join(werte[:4])}")
 
-                # 2. PDF-Overlay mit ReportLab erstellen (Koordinaten-Feintuning hier möglich)
-                packet = io.BytesIO()
-                c = canvas.Canvas(packet, pagesize=A4)
-                c.setFont("Helvetica-Bold", 12)
-                
-                # ---------------------------------------------------------
-                # KOORDINATEN FÜR DIE 4 BOXEN (X = von links, Y = von unten)
-                # Du kannst diese Werte anpassen, falls die Zahlen in deiner
-                # Vorlage exakt in den Kästchen landen sollen.
-                # ---------------------------------------------------------
-                Y_POS = 450  # Höhe der Boxen auf der Seite
-                
-                X_SCHA_AUSSEN = 300  # 1. Scheibenanzahl AUSSEN-KREIS
-                X_RAD_AUSSEN  = 360  # 2. Radius AUSSEN-KREIS
-                X_RAD_INNEN   = 420  # 3. Radius INNEN-KREIS
-                X_SCHA_INNEN  = 480  # 4. Scheibenanzahl INNEN-KREIS
+            # 2. PDF Overlay erstellen
+            status_box.info("📄 Erstelle PDF-Datei...")
+            packet = io.BytesIO()
+            c = canvas.Canvas(packet, pagesize=A4)
+            c.setFont("Helvetica-Bold", 12)
+            
+            # --- KOORDINATEN DER 4 BOXEN ---
+            Y_POS = 450  # Höhe der Boxen auf der Seite
+            
+            X_SCHA_AUSSEN = 300  # 1. Scheibenanzahl AUSSEN-KREIS
+            X_RAD_AUSSEN  = 360  # 2. Radius AUSSEN-KREIS
+            X_RAD_INNEN   = 420  # 3. Radius INNEN-KREIS
+            X_SCHA_INNEN  = 480  # 4. Scheibenanzahl INNEN-KREIS
 
-                # Werte auf das unsichtbare Overlay schreiben
-                c.drawString(X_SCHA_AUSSEN, Y_POS, werte[0])
-                c.drawString(X_RAD_AUSSEN,  Y_POS, werte[1])
-                c.drawString(X_RAD_INNEN,   Y_POS, werte[2])
-                c.drawString(X_SCHA_INNEN,  Y_POS, werte[3])
-                
-                c.save()
-                packet.seek(0)
+            c.drawString(X_SCHA_AUSSEN, Y_POS, werte[0])
+            c.drawString(X_RAD_AUSSEN,  Y_POS, werte[1])
+            c.drawString(X_RAD_INNEN,   Y_POS, werte[2])
+            c.drawString(X_SCHA_INNEN,  Y_POS, werte[3])
+            
+            c.save()
+            packet.seek(0)
 
-                # 3. Mit Vorlage.pdf zusammenführen (Groß-/Kleinschreibung beachtet)
-                overlay_pdf = PdfReader(packet)
-                original_pdf = PdfReader("Vorlage.pdf")
-                writer = PdfWriter()
+            # 3. Mit Vorlage.pdf zusammenführen
+            overlay_pdf = PdfReader(packet)
+            original_pdf = PdfReader("Vorlage.pdf")
+            writer = PdfWriter()
 
-                # Erste Seite stempeln
-                first_page = original_pdf.pages[0]
-                first_page.merge_page(overlay_pdf.pages[0])
-                writer.add_page(first_page)
+            first_page = original_pdf.pages[0]
+            first_page.merge_page(overlay_pdf.pages[0])
+            writer.add_page(first_page)
 
-                # Restliche Seiten unverändert anfügen
-                for page in original_pdf.pages[1:]:
-                    writer.add_page(page)
+            for page in original_pdf.pages[1:]:
+                writer.add_page(page)
 
-                # Speichern in Speicherbuffer
-                output_pdf = io.BytesIO()
-                writer.write(output_pdf)
-                output_pdf.seek(0)
+            output_pdf = io.BytesIO()
+            writer.write(output_pdf)
+            output_pdf.seek(0)
 
-                st.success("✅ PDF wurde erfolgreich generiert!")
-                
-                # 4. Download Button
-                st.download_button(
-                    label="📥 Fertiges PDF Herunterladen",
-                    data=output_pdf,
-                    file_name="ausgefuellt.pdf",
-                    mime="application/pdf"
-                )
+            status_box.empty()
+            st.success("✅ PDF wurde erfolgreich generiert!")
+            
+            # 4. Download Button
+            st.download_button(
+                label="📥 Fertiges PDF Herunterladen",
+                data=output_pdf,
+                file_name="ausgefuellt.pdf",
+                mime="application/pdf"
+            )
 
-            except Exception as e:
-                st.error(f"Fehler bei der Ausführung: {e}")
+        except Exception as e:
+            status_box.empty()
+            st.error(f"❌ Fehler bei der Ausführung: {e}")
