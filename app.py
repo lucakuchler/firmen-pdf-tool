@@ -6,34 +6,38 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
 # --- STREAMLIT PAGE CONFIG ---
-st.set_page_config(page_title="PDF Generator", page_icon="📄", layout="centered")
+st.set_page_config(page_title="Firmen PDF Generator", page_icon="📄", layout="centered")
 
 st.title("📄 Firmen PDF Generator")
-st.write("Füge Daten ein, um das PDF 'vorlage.pdf' automatisch zu füllen.")
+st.write("Füge Daten ein, um das PDF automatisch zu füllen.")
 
 # --- SIDEBAR: API KEY ---
 st.sidebar.header("Einstellungen")
 api_key = st.sidebar.text_input("Google AI Studio API-Key:", type="password")
 
 # --- MAIN INPUT ---
-user_input = st.text_area("Eingabe / Anweisungen für die 4 Zahlen:", height=150, placeholder="Z. B. 'Berechne die Summen für Projekt X...'")
+user_input = st.text_area("Geben Sie hier die Daten oder Anweisungen ein:", height=150, placeholder="Z. B. 'Außenkreis Scheiben 5, Radius 10...'")
 
 # --- MODELL-VERARBEITUNG ---
 def generate_values_with_gemini(api_key, user_text):
     genai.configure(api_key=api_key)
     
-    # Primär wird Gemini 3.5 Flash probiert, alternativ der Alias
+    # Nutzt das etablierte Gemini 3.5 Flash / Flash-Latest Modell
     models_to_try = ["gemini-3.5-flash", "gemini-flash-latest"]
     
     prompt = f"""
     Du bist ein Präzisions-Tool zur Datenextraktion.
-    Verarbeite folgenden Text und liefere EXAKTFUSSENDE 4 Zahlen/Werte zurück, getrennt durch Kommas.
+    Verarbeite folgenden Text und liefere EXAKT 4 Zahlen/Werte in folgender Reihenfolge zurück:
+    1. Scheibenanzahl AUSSEN-KREIS
+    2. Radius AUSSEN-KREIS
+    3. Radius INNEN-KREIS
+    4. Scheibenanzahl INNEN-KREIS
     
     Eingabetext:
     {user_text}
 
     Antworte AUSSCHLIESSLICH im Format: Wert1, Wert2, Wert3, Wert4
-    Keine Erklärungen, kein Markdown, nur die 4 Werte.
+    Keine Erklärungen, kein Markdown, nur die 4 Werte durch Komma getrennt.
     """
     
     last_error = None
@@ -49,43 +53,53 @@ def generate_values_with_gemini(api_key, user_text):
     raise last_error
 
 # --- PROCESS BUTTON ---
-if st.button("🚀 PDF Erstellen", type="primary"):
+if st.button("🚀 PDF Erstellen & Ausfüllen", type="primary"):
     if not api_key:
         st.error("Bitte gib zuerst deinen Gemini API-Key in der Seitenleiste ein!")
     elif not user_input.strip():
         st.warning("Bitte gib Daten oder Text ein.")
     else:
-        with st.spinner("Verarbeite Daten mit Gemini 3.5 Flash..."):
+        with st.spinner("Verarbeite Daten mit Gemini..."):
             try:
                 # 1. API Aufruf
                 raw_response = generate_values_with_gemini(api_key, user_input)
                 
                 # Werte parsen
                 werte = [w.strip() for w in raw_response.split(",")]
-                
-                # Auffüllen falls weniger als 4 Werte zurückkommen
                 while len(werte) < 4:
                     werte.append("0")
 
-                st.info(f"Erkannte Werte für das PDF: {', '.join(werte[:4])}")
+                st.info(f"Erkannte Werte (Aussen-Scheiben, Aussen-Radius, Innen-Radius, Innen-Scheiben): {', '.join(werte[:4])}")
 
-                # 2. PDF-Overlay mit ReportLab erstellen
+                # 2. PDF-Overlay mit ReportLab erstellen (Koordinaten-Feintuning hier möglich)
                 packet = io.BytesIO()
                 c = canvas.Canvas(packet, pagesize=A4)
                 c.setFont("Helvetica-Bold", 12)
                 
-                # Positionen auf der A4-Seite (X, Y) - Anpassen falls nötig
-                c.drawString(100, 700, werte[0])
-                c.drawString(100, 650, werte[1])
-                c.drawString(100, 600, werte[2])
-                c.drawString(100, 550, werte[3])
+                # ---------------------------------------------------------
+                # KOORDINATEN FÜR DIE 4 BOXEN (X = von links, Y = von unten)
+                # Du kannst diese Werte anpassen, falls die Zahlen in deiner
+                # Vorlage exakt in den Kästchen landen sollen.
+                # ---------------------------------------------------------
+                Y_POS = 450  # Höhe der Boxen auf der Seite
+                
+                X_SCHA_AUSSEN = 300  # 1. Scheibenanzahl AUSSEN-KREIS
+                X_RAD_AUSSEN  = 360  # 2. Radius AUSSEN-KREIS
+                X_RAD_INNEN   = 420  # 3. Radius INNEN-KREIS
+                X_SCHA_INNEN  = 480  # 4. Scheibenanzahl INNEN-KREIS
+
+                # Werte auf das unsichtbare Overlay schreiben
+                c.drawString(X_SCHA_AUSSEN, Y_POS, werte[0])
+                c.drawString(X_RAD_AUSSEN,  Y_POS, werte[1])
+                c.drawString(X_RAD_INNEN,   Y_POS, werte[2])
+                c.drawString(X_SCHA_INNEN,  Y_POS, werte[3])
                 
                 c.save()
                 packet.seek(0)
 
-                # 3. Mit vorlage.pdf zusammenführen
+                # 3. Mit Vorlage.pdf zusammenführen (Groß-/Kleinschreibung beachtet)
                 overlay_pdf = PdfReader(packet)
-                original_pdf = PdfReader("vorlage.pdf")
+                original_pdf = PdfReader("Vorlage.pdf")
                 writer = PdfWriter()
 
                 # Erste Seite stempeln
