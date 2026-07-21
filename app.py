@@ -1,6 +1,5 @@
 import streamlit as st
 from google import genai
-from google.genai import types
 import io
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
@@ -24,10 +23,10 @@ if st.button("PDF Erstellen & Ausfüllen"):
     else:
         with st.spinner("Gemini berechnet die Werte und baut die PDF..."):
             try:
-                # 1. Gemini Client mit neuem SDK initialisieren
+                # 1. Gemini Client mit aktuellem SDK initialisieren
                 client = genai.Client(api_key=api_key)
                 
-                # Hier stellen wir die Anfrage an das Modell gemini-2.5-flash (oder gemini-2.5-pro)
+                # Anweisung & Prompt für Gemini
                 prompt = f"""
                 Du bist ein hochpräzises Firmen-Berechnungs-Tool. 
                 Verarbeite folgende Eingabe basierend auf der Firmen-Logik:
@@ -37,17 +36,11 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 Beispiel: 1250.00, 19%, 237.50, 1487.50
                 """
 
-                # Wir testen gemini-2.5-flash und schalten im Notfall auf gemini-2.5-pro um
-                try:
-                    response = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=prompt,
-                    )
-                except Exception:
-                    response = client.models.generate_content(
-                        model='gemini-2.5-pro',
-                        contents=prompt,
-                    )
+                # Aufruf über das unlimitierte Flash-Modell
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                )
                 
                 # 2. Berechnete Werte aufteilen
                 werte = [w.strip() for w in response.text.split(",")]
@@ -58,9 +51,10 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 packet = io.BytesIO()
                 c = canvas.Canvas(packet, pagesize=A4)
                 c.setFont("Helvetica-Bold", 12)
-                c.setFillColorRGB(0, 0, 0) # Schwarze Schrift
+                c.setFillColorRGB(0, 0, 0)  # Schwarze Schrift
                 
                 # KOORDINATEN FÜR DIE 4 ZAHLEN (X = von links, Y = von unten in Punkten)
+                # (1 cm ≈ 28.35 Punkte)
                 c.drawString(100, 700, werte[0])  # Zahl 1
                 c.drawString(100, 650, werte[1])  # Zahl 2
                 c.drawString(100, 600, werte[2])  # Zahl 3
@@ -78,7 +72,7 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 page.merge_page(zahlen_pdf.pages[0])
                 writer.add_page(page)
 
-                # Weitere Seiten übernehmen, falls vorhanden
+                # Weitere Seiten der Vorlage übernehmen, falls vorhanden
                 for p in original_pdf.pages[1:]:
                     writer.add_page(p)
 
