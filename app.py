@@ -23,7 +23,7 @@ if st.button("PDF Erstellen & Ausfüllen"):
     else:
         with st.spinner("Gemini berechnet die Werte und baut die PDF..."):
             try:
-                # 1. Client mit API-Key initialisieren
+                # 1. Client initialisieren
                 client = genai.Client(api_key=api_key)
 
                 prompt = f"""
@@ -35,12 +35,34 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 Beispiel: 1250.00, 19%, 237.50, 1487.50
                 """
 
-                # HART FESTGELEGTES MODELL (keine automatische Auswahl mehr)
-                response = client.models.generate_content(
-                    model='gemini-1.5-flash',
-                    contents=prompt,
-                )
-                
+                # Liste aller möglichen Modellbezeichnungen bei Google
+                candidate_models = [
+                    'gemini-1.5-flash-latest',
+                    'gemini-2.5-flash',
+                    'gemini-2.0-flash',
+                    'gemini-1.5-flash-8b'
+                ]
+
+                response = None
+                used_model = None
+                last_error = None
+
+                # Schleife: Probiere die Modelle der Reihe nach durch
+                for model_name in candidate_models:
+                    try:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=prompt,
+                        )
+                        used_model = model_name
+                        break  # Erfolg! Schleife abbrechen
+                    except Exception as err:
+                        last_error = err
+                        continue  # Bei Fehler das nächste Modell probieren
+
+                if response is None:
+                    raise Exception(f"Keines der verfügbaren Modelle konnte erreicht werden. Letzter Fehler: {last_error}")
+
                 # 2. Berechnete Werte aufteilen
                 werte = [w.strip() for w in response.text.split(",")]
                 while len(werte) < 4:
@@ -78,7 +100,7 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 output_pdf.seek(0)
 
                 # 5. Erfolgsmeldung & Download-Button
-                st.success("PDF erfolgreich generiert!")
+                st.success(f"PDF erfolgreich generiert! (Verwendetes Modell: {used_model})")
                 st.download_button(
                     label="📥 Fertige PDF herunterladen",
                     data=output_pdf,
