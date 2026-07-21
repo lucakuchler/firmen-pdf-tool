@@ -29,9 +29,9 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 # Automatisch verfügbare Modelle für deinen API-Key abfragen
                 available_models = [m.name for m in client.models.list()]
                 
-                # Suche nach echten, gültigen Modellen in Prioritätsreihenfolge
+                # Priorisiere 1.5-flash für stabile Free-Tier Limits
                 selected_model = None
-                for candidate in ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']:
+                for candidate in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash']:
                     for m in available_models:
                         if candidate in m:
                             selected_model = m
@@ -52,7 +52,7 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 Beispiel: 1250.00, 19%, 237.50, 1487.50
                 """
 
-                # Aufruf mit dem dynamisch ermittelten Modell
+                # Aufruf mit dem stabilen Modell
                 response = client.models.generate_content(
                     model=selected_model,
                     contents=prompt,
@@ -69,7 +69,7 @@ if st.button("PDF Erstellen & Ausfüllen"):
                 c.setFont("Helvetica-Bold", 12)
                 c.setFillColorRGB(0, 0, 0)
                 
-                # KOORDINATEN FÜR DIE 4 ZAHLEN (X = von links, Y = von unten in Punkten)
+                # KOORDINATEN FÜR DIE 4 ZAHLEN
                 c.drawString(100, 700, werte[0])  # Zahl 1
                 c.drawString(100, 650, werte[1])  # Zahl 2
                 c.drawString(100, 600, werte[2])  # Zahl 3
